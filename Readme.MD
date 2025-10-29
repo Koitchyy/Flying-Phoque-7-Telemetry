@@ -1,0 +1,1 @@
+This repo contains firmware for the Flying Phoque 7. Used for the SSI Rockets Avionics workshop. See [here](https://drive.google.com/drive/folders/1tiUvKedx1bPB-v8GK1kLOYGjgW4yYmwD?usp=share_link) for details. 
