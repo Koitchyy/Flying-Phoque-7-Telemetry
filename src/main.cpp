@@ -12,9 +12,9 @@
 #include <SPI.h>
 #include <States.h>
 #include <Wire.h>
+#include <peripherals/Bilda.h>
 #include <peripherals/Igniter.h>
 #include <peripherals/StatusIndicator.h>
-#include <peripherals/Bilda.h>
 #include <sensor_drivers/Adxl.h>
 #include <sensor_drivers/BNO.h>
 #include <sensor_drivers/Lps22.h>
@@ -47,11 +47,13 @@ float bno_i, bno_j, bno_k, bno_real; // quaternion (rotation vector)
 bool primaryIgniterConnected = false;
 bool backupIgniterConnected = false;
 
-// added for airbrakes
+// Airbrake control globals
 int ignition_time = 0;
 int motor_burnout_time = 0;
 int last_actuation_time = 0;
-uint8_t curr_deploy_percentage = 0;
+float airbrake_pct = 0.0;
+int airbrake_direction = 1; // 1 = extend, -1 = retract
+unsigned long last_airbrake_update = 0;
 
 Logging logging(true, true, PinDefs.SD_CS);
 File dataFile;
@@ -252,7 +254,7 @@ void loop() {
     lps22.readTemperature(&temperature);
   }
 
-  float altitude = altitudeDelta(p_ref, pressure, t_ref, temperature + 273.15); 
+  float altitude = altitudeDelta(p_ref, pressure, t_ref, temperature + 273.15);
 
   /* ------------  B N O 0 8 0  DATA  ------------------------------ */
   if (USE_BNO080) {
@@ -304,23 +306,33 @@ void loop() {
 
     max_altitude = max(max_altitude, altitude);
 
-    // TODO: Add airbrake controls
-    if (millis() - ignition_time > 4000 ||
-        millis() - motor_burnout_time > 800) {
-      // add airbrake test routine
+    // Airbrake control logic
+    if (millis() - ignition_time > 24000 ||
+        millis() - motor_burnout_time > 20000) {
 
-      airbrakes.deploy(); // 300°
-      last_actuation_time = millis();
+      // Sweep: 0% to 60% and back, 10% steps, 1.0s hold
+      if (millis() - last_airbrake_update >= 1000) {
+        last_airbrake_update = millis();
+
+        airbrake_pct += 10.0 * airbrake_direction;
+
+        // Clamp and reverse direction
+        if (airbrake_pct >= 60.0) {
+          airbrake_pct = 60.0;
+          airbrake_direction = -1;
+        } else if (airbrake_pct <= 0.0) {
+          airbrake_pct = 0.0;
+          airbrake_direction = 1;
+        }
+        airbrakes.setExtension(airbrake_pct);
+      }
     }
-
-    if (millis() - last_actuation_time > 500) {
-      airbrakes.setExtension(90.0);
-    }
-
 
     // Check for apogee conditions
-    if (max_altitude > 100.0 && altitude < max_altitude - 5.0) { // may need to clean up this logic - alt determined by barometer, smth which needs mach lockout
-      airbrakes.retract()
+    if (max_altitude > 100.0 && altitude < max_altitude - 5.0) { 
+      // may need to clean up this logic - alt determined by
+      // barometer, smth which needs mach lockout
+      airbrakes.retract();
       state = States::APOGEE;
       fire_time = millis();
     }

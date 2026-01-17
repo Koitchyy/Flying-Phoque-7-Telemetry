@@ -1,4 +1,4 @@
-#include "bilda.h"
+#include "Bilda.h"
 
 Bilda::Bilda() {}
 
