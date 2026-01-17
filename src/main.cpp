@@ -20,7 +20,7 @@
 #include <sensor_drivers/Lps22.h>
 #include <telemetry/telStruct.h>
 
-const bool SIMULATION_MODE = false;
+const bool SIMULATION_MODE = true;
 const bool USE_BNO080 = true;
 
 // Telemetry related //
