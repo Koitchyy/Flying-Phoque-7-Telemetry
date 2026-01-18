@@ -161,7 +161,7 @@ void setup() {
     unsigned long bno_start_time = millis();
     const unsigned long bno_timeout = 15000;
 
-    while (bno_attempts < 10) {
+    while (bno_attempts < 100) {
       if (millis() - bno_start_time > bno_timeout) {
         Serial1.println("BNO080 initialization timeout. Giving up.");
         break;
@@ -180,7 +180,7 @@ void setup() {
       bno_attempts++;
     }
 
-    if (bno_attempts >= 10) {
+    if (bno_attempts >= 100) {
       Serial1.println("BNO080 initialization failed. Continuing without BNO.");
     }
   }
@@ -288,14 +288,13 @@ void loop() {
   case States::IDLE:
     statusIndicator.solid(StatusIndicator::GREEN);
 
-    if (accel_y > 10.0) {
+    if (accel_y > 8.0) {
       state = States::IGNITION;
+      ignition_time = millis();
     }
     break;
   case States::IGNITION:
     statusIndicator.solid(StatusIndicator::ORANGE);
-
-    ignition_time = millis();
 
     if (accel_y < 0) {
       motor_burnout_time = millis();
@@ -312,7 +311,8 @@ void loop() {
     if (millis() - ignition_time > 12000 ||
         millis() - motor_burnout_time > 8000) {
 
-      // Sweep: 0% to 60% and back, 10% steps, 1.0s hold
+      // Sweep: 0% to 60% and back, 10% steps, 1.0s hold (1.5s when fully
+      // closed)
       if (millis() - last_airbrake_update >=
           (airbrake_pct <= 0 ? 1500 : 1000)) {
         last_airbrake_update = millis();
