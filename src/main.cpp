@@ -46,6 +46,7 @@ float bno_i, bno_j, bno_k, bno_real; // quaternion (rotation vector)
 
 bool primaryIgniterConnected = false;
 bool backupIgniterConnected = false;
+bool hasCheckedForHorizontal = false;
 
 // Airbrake control globals
 int ignition_time = 0;
@@ -292,6 +293,34 @@ void loop() {
       state = States::IGNITION;
       ignition_time = millis();
     }
+
+    if (!hasCheckedForHorizontal) {
+      if (abs(accel_y) < abs(accel_x) || abs(accel_y) < abs(accel_z)) {
+        state = States::AIRBRAKE_TEST;
+        airbrake_direction = 1;
+        last_airbrake_update = 0;
+        airbrake_pct = 0;
+      }
+      hasCheckedForHorizontal = true;
+    }
+    break;
+  case States::AIRBRAKE_TEST:
+    statusIndicator.solid(StatusIndicator::BLUE);
+
+    // Sweep: 0% to 60% and back
+    if (millis() - last_airbrake_update >= (airbrake_pct <= 0 ? 3000 : 1000)) {
+      last_airbrake_update = millis();
+      airbrake_pct += 60.0 * airbrake_direction;
+      if (airbrake_pct >= 60.0) {
+        airbrake_pct = 60.0;
+        airbrake_direction = -1;
+      } else if (airbrake_pct <= 0.0) {
+        airbrake_pct = 0.0;
+        airbrake_direction = 1;
+      }
+      airbrakes.setExtension(airbrake_pct);
+    }
+
     break;
   case States::IGNITION:
     statusIndicator.solid(StatusIndicator::ORANGE);
