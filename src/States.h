@@ -3,6 +3,7 @@
 
 enum States {
   BOOT,
+  SENSOR_ERROR,
   IDLE,
   AIRBRAKE_TEST,
   IGNITION,

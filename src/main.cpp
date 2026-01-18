@@ -55,6 +55,7 @@ int last_actuation_time = 0;
 float airbrake_pct = 0.0;
 int airbrake_direction = 1; // 1 = extend, -1 = retract
 unsigned long last_airbrake_update = 0;
+int failedSensors = 0;
 
 Logging logging(true, true, PinDefs.SD_CS);
 File dataFile;
@@ -124,6 +125,7 @@ void setup() {
     delay(1000);
     adxl345_attempts++;
     if (adxl345_attempts >= 10) {
+      failedSensors++;
       break;
     }
   }
@@ -137,6 +139,7 @@ void setup() {
     delay(1000);
     adxl375_attempts++;
     if (adxl375_attempts >= 10) {
+      failedSensors++;
       break;
     }
   }
@@ -150,6 +153,7 @@ void setup() {
     delay(1000);
     lps_attempts++;
     if (lps_attempts >= 10) {
+      failedSensors++;
       break;
     }
   }
@@ -157,33 +161,23 @@ void setup() {
 
   // BNO080 (optional)
   if (USE_BNO080) {
-    Serial1.println("Attempting BNO080 initialization...");
     int bno_attempts = 0;
-    unsigned long bno_start_time = millis();
-    const unsigned long bno_timeout = 15000;
-
-    while (bno_attempts < 100) {
-      if (millis() - bno_start_time > bno_timeout) {
-        Serial1.println("BNO080 initialization timeout. Giving up.");
-        break;
-      }
-
-      if (bno080.begin()) {
-        Serial1.println("BNO080 initialized successfully!");
-        break;
-      }
-
+    Serial1.println("Attempting BNO080 initialization...");
+    while (!bno080.begin()) {
       logging.log("ErrBNO080");
       Serial1.print("Waiting for BNO080 (attempt ");
       Serial1.print(bno_attempts + 1);
       Serial1.println("/10)...");
       delay(1000);
       bno_attempts++;
+      if (bno_attempts >= 10) {
+        Serial1.println(
+            "BNO080 initialization failed. Continuing without BNO.");
+        failedSensors++;
+        break;
+      }
     }
-
-    if (bno_attempts >= 100) {
-      Serial1.println("BNO080 initialization failed. Continuing without BNO.");
-    }
+    Serial1.println("BNO080 initialized successfully!");
   }
 
   // ---------------- Reference readings ----------------
@@ -203,9 +197,15 @@ void setup() {
   logging.log(logHeading.c_str());
   logging.flush();
 
-  statusIndicator.solid(StatusIndicator::GREEN);
-  Serial1.println("Setup complete");
-  state = States::IDLE;
+  if (failedSensors > 0) {
+    statusIndicator.solid(StatusIndicator::WHITE);
+    Serial1.println("Setup failed");
+    state = States::SENSOR_ERROR;
+  } else {
+    statusIndicator.solid(StatusIndicator::GREEN);
+    Serial1.println("Setup complete");
+    state = States::IDLE;
+  }
 }
 
 float altitudeDelta(float p_ref, float p, float T_ref, float T) {
@@ -286,6 +286,10 @@ void loop() {
 
   // State machine
   switch (state) {
+  case States::SENSOR_ERROR:
+    statusIndicator.solid(StatusIndicator::WHITE);
+    delay(50);
+    break;
   case States::IDLE:
     statusIndicator.solid(StatusIndicator::GREEN);
 
