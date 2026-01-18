@@ -20,7 +20,7 @@
 #include <sensor_drivers/Lps22.h>
 #include <telemetry/telStruct.h>
 
-const bool SIMULATION_MODE = true;
+const bool SIMULATION_MODE = false;
 const bool USE_BNO080 = true;
 
 // Telemetry related //
@@ -197,7 +197,8 @@ void setup() {
   // ---------------- Log header ----------------
   const String logHeading =
       "Time\tXg\tYg\tZg\tXhg\tYhg\tZhg\tPressure\tTemperature\tAltitude\t"
-      "BNO_X\tBNO_Y\tBNO_Z\tBNO_I\tBNO_J\tBNO_K\tBNO_Real\tState";
+      "BNO_X\tBNO_Y\tBNO_Z\tBNO_I\tBNO_J\tBNO_K\tBNO_Real\tState\tAirbrake_"
+      "pct\tAirbrake_dir";
   logging.log(logHeading.c_str());
   logging.flush();
 
@@ -272,7 +273,8 @@ void loop() {
       String(pressure) + ", " + String(temperature) + ", " + String(altitude) +
       ", " + String(bno_x) + ", " + String(bno_y) + ", " + String(bno_z) +
       ", " + String(bno_i) + ", " + String(bno_j) + ", " + String(bno_k) +
-      ", " + String(bno_real) + ", " + stateToString(state);
+      ", " + String(bno_real) + ", " + stateToString(state) + ", " +
+      String(airbrake_pct) + ", " + String(airbrake_direction);
 
   logging.log(logMessage.c_str());
 
@@ -307,19 +309,20 @@ void loop() {
     max_altitude = max(max_altitude, altitude);
 
     // Airbrake control logic
-    if (millis() - ignition_time > 24000 ||
-        millis() - motor_burnout_time > 20000) {
+    if (millis() - ignition_time > 12000 ||
+        millis() - motor_burnout_time > 8000) {
 
       // Sweep: 0% to 60% and back, 10% steps, 1.0s hold
-      if (millis() - last_airbrake_update >= 1000) {
+      if (millis() - last_airbrake_update >=
+          (airbrake_pct <= 0 ? 1500 : 1000)) {
         last_airbrake_update = millis();
 
-        airbrake_pct += 10.0 * airbrake_direction;
+        airbrake_pct += 30.0 * airbrake_direction;
 
         // Clamp and reverse direction
         if (airbrake_pct >= 60.0) {
           airbrake_pct = 60.0;
-          airbrake_direction = -1;
+          airbrake_direction = -2; // bring straight back to 0
         } else if (airbrake_pct <= 0.0) {
           airbrake_pct = 0.0;
           airbrake_direction = 1;
@@ -328,11 +331,11 @@ void loop() {
       }
     }
 
-    // Check for apogee conditions
-    if (max_altitude > 100.0 && altitude < max_altitude - 5.0) { 
-      // may need to clean up this logic - alt determined by
-      // barometer, smth which needs mach lockout
-      airbrakes.retract();
+    // Check for apogee conditions (time based)
+    if (millis() - ignition_time > 30000) {
+      airbrakes.setExtension(0.0);
+      airbrake_pct = 0.0;
+      airbrake_direction = 1;
       state = States::APOGEE;
       fire_time = millis();
     }
@@ -364,49 +367,50 @@ void loop() {
     state = States::IDLE;
     break;
   }
+
   delay(50);
 
-  if (USE_TELEMETRY &&
-      (millis() - lastTelemetrySend >= 50U)) { // send every 50 ms
-    TelemetryPacket pkt;
+  // if (USE_TELEMETRY &&
+  //     (millis() - lastTelemetrySend >= 50U)) { // send every 50 ms
+  //   TelemetryPacket pkt;
 
-    pkt.time_ms = millis();
-    pkt.accel_x = accel_x;
-    pkt.accel_y = accel_y;
-    pkt.accel_z = accel_z;
-    pkt.accel_x_high_g = accel_x_high_g;
-    pkt.accel_y_high_g = accel_y_high_g;
-    pkt.accel_z_high_g = accel_z_high_g;
-    pkt.pressure = pressure;
-    pkt.temperature = temperature;
-    pkt.altitude = altitude;
-    pkt.bno_x = bno_x;
-    pkt.bno_y = bno_y;
-    pkt.bno_z = bno_z;
-    pkt.bno_i = bno_i;
-    pkt.bno_j = bno_j;
-    pkt.bno_k = bno_k;
-    pkt.bno_real = bno_real;
-    pkt.state = static_cast<uint8_t>(state);
-    pkt.crc = computeCRC((uint8_t *)&pkt, sizeof(pkt) - 1);
+  //   pkt.time_ms = millis();
+  //   pkt.accel_x = accel_x;
+  //   pkt.accel_y = accel_y;
+  //   pkt.accel_z = accel_z;
+  //   pkt.accel_x_high_g = accel_x_high_g;
+  //   pkt.accel_y_high_g = accel_y_high_g;
+  //   pkt.accel_z_high_g = accel_z_high_g;
+  //   pkt.pressure = pressure;
+  //   pkt.temperature = temperature;
+  //   pkt.altitude = altitude;
+  //   pkt.bno_x = bno_x;
+  //   pkt.bno_y = bno_y;
+  //   pkt.bno_z = bno_z;
+  //   pkt.bno_i = bno_i;
+  //   pkt.bno_j = bno_j;
+  //   pkt.bno_k = bno_k;
+  //   pkt.bno_real = bno_real;
+  //   pkt.state = static_cast<uint8_t>(state);
+  //   pkt.crc = computeCRC((uint8_t *)&pkt, sizeof(pkt) - 1);
 
-    Wire.beginTransmission(TEENSY_I2C_ADDR);
-    Wire.write((uint8_t *)&pkt, sizeof(pkt));
-    uint8_t result = Wire.endTransmission();
+  //   Wire.beginTransmission(TEENSY_I2C_ADDR);
+  //   Wire.write((uint8_t *)&pkt, sizeof(pkt));
+  //   uint8_t result = Wire.endTransmission();
 
-    if (result != 0) {
-      delay(5);
-      Wire.beginTransmission(TEENSY_I2C_ADDR);
-      Wire.write((uint8_t *)&pkt, sizeof(pkt));
-      result = Wire.endTransmission();
-      if (result != 0) {
-        Serial1.print("I2C retry failed: ");
-        Serial1.println(result);
-      }
-    }
-    Serial1.print("Telemetry packet size: ");
-    Serial1.println(sizeof(TelemetryPacket));
+  //   if (result != 0) {
+  //     delay(5);
+  //     Wire.beginTransmission(TEENSY_I2C_ADDR);
+  //     Wire.write((uint8_t *)&pkt, sizeof(pkt));
+  //     result = Wire.endTransmission();
+  //     if (result != 0) {
+  //       Serial1.print("I2C retry failed: ");
+  //       Serial1.println(result);
+  //     }
+  //   }
+  //   Serial1.print("Telemetry packet size: ");
+  //   Serial1.println(sizeof(TelemetryPacket));
 
-    lastTelemetrySend = millis();
-  }
+  //   lastTelemetrySend = millis();
+  // }
 }
