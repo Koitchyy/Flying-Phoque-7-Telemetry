@@ -19,6 +19,6 @@ void Bilda::setExtension(float percentage) {
   _servo.writeMicroseconds(us);
 }
 
-void Bilda::retract() { setExtension(0.0); }
+void Bilda::retract() { setExtension(10.0); }
 
 void Bilda::deploy() { setExtension(100.0); }

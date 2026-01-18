@@ -22,6 +22,8 @@
 
 const bool SIMULATION_MODE = false;
 const bool USE_BNO080 = true;
+const float AIRBRAKE_MIN = 10.0;
+const float AIRBRAKE_MAX = 60.0;
 
 // Telemetry related //
 const bool USE_TELEMETRY = false;
@@ -52,7 +54,7 @@ bool hasCheckedForHorizontal = false;
 int ignition_time = 0;
 int motor_burnout_time = 0;
 int last_actuation_time = 0;
-float airbrake_pct = 0.0;
+float airbrake_pct = AIRBRAKE_MIN;
 int airbrake_direction = 1; // 1 = extend, -1 = retract
 unsigned long last_airbrake_update = 0;
 int failedSensors = 0;
@@ -303,7 +305,7 @@ void loop() {
         state = States::AIRBRAKE_TEST;
         airbrake_direction = 1;
         last_airbrake_update = 0;
-        airbrake_pct = 0;
+        airbrake_pct = AIRBRAKE_MIN;
       }
       hasCheckedForHorizontal = true;
     }
@@ -311,15 +313,16 @@ void loop() {
   case States::AIRBRAKE_TEST:
     statusIndicator.solid(StatusIndicator::BLUE);
 
-    // Sweep: 0% to 60% and back
-    if (millis() - last_airbrake_update >= (airbrake_pct <= 0 ? 3000 : 1000)) {
+    // Sweep: 10% to 60% and back
+    if (millis() - last_airbrake_update >=
+        (airbrake_pct <= AIRBRAKE_MIN ? 3000 : 1000)) {
       last_airbrake_update = millis();
-      airbrake_pct += 60.0 * airbrake_direction;
-      if (airbrake_pct >= 60.0) {
-        airbrake_pct = 60.0;
+      airbrake_pct += AIRBRAKE_MAX * airbrake_direction;
+      if (airbrake_pct >= AIRBRAKE_MAX) {
+        airbrake_pct = AIRBRAKE_MAX;
         airbrake_direction = -1;
-      } else if (airbrake_pct <= 0.0) {
-        airbrake_pct = 0.0;
+      } else if (airbrake_pct <= AIRBRAKE_MIN) {
+        airbrake_pct = AIRBRAKE_MIN;
         airbrake_direction = 1;
       }
       airbrakes.setExtension(airbrake_pct);
@@ -347,17 +350,17 @@ void loop() {
       // Sweep: 0% to 60% and back, 10% steps, 1.0s hold (1.5s when fully
       // closed)
       if (millis() - last_airbrake_update >=
-          (airbrake_pct <= 0 ? 1500 : 1000)) {
+          (airbrake_pct <= AIRBRAKE_MIN ? 1500 : 1000)) {
         last_airbrake_update = millis();
 
-        airbrake_pct += 30.0 * airbrake_direction;
+        airbrake_pct += 25.0 * airbrake_direction;
 
         // Clamp and reverse direction
-        if (airbrake_pct >= 60.0) {
-          airbrake_pct = 60.0;
+        if (airbrake_pct >= AIRBRAKE_MAX) {
+          airbrake_pct = AIRBRAKE_MAX;
           airbrake_direction = -2; // bring straight back to 0
-        } else if (airbrake_pct <= 0.0) {
-          airbrake_pct = 0.0;
+        } else if (airbrake_pct <= AIRBRAKE_MIN) {
+          airbrake_pct = AIRBRAKE_MIN;
           airbrake_direction = 1;
         }
         airbrakes.setExtension(airbrake_pct);
@@ -366,8 +369,8 @@ void loop() {
 
     // Check for apogee conditions (time based)
     if (millis() - ignition_time > 30000) {
-      airbrakes.setExtension(0.0);
-      airbrake_pct = 0.0;
+      airbrakes.setExtension(AIRBRAKE_MIN);
+      airbrake_pct = AIRBRAKE_MIN;
       airbrake_direction = 1;
       state = States::APOGEE;
       fire_time = millis();
